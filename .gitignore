@@ -1,0 +1,60 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+.env
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+backend/venv/
+backend/.venv/
+.pytest_cache/
+.mypy_cache/
+
+# backend runtime state
+#
+# The catalogue, feature contract and climate fixtures ARE committed: they are
+# small, they are generated from the TypeScript source, and having them present
+# means the backend and its parity tests run on a fresh clone without first
+# running the exporter. The training set is ~14 MB at the default 12 000 rows
+# and the model artefacts are large binaries, so both are regenerated instead —
+# see `scripts/export-dataset.ts` and `scripts/train-surrogate.ts`.
+backend/thermal_shelter.db
+backend/models/
+backend/data/training-set.json
+
