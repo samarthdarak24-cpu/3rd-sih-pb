@@ -53,11 +53,17 @@ export interface ClimateStageResult {
 
 export async function runClimateStage(
   location: Location,
-  options: { preferLive?: boolean; preferBackend?: boolean; signal?: AbortSignal } = {},
+  options: {
+    preferLive?: boolean;
+    preferBackend?: boolean;
+    openMeteoApiKey?: string;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<ClimateStageResult> {
   const resolved = await resolveClimate(location, {
     preferLive: options.preferLive ?? true,
     preferBackend: options.preferBackend ?? false,
+    openMeteoApiKey: options.openMeteoApiKey,
     signal: options.signal,
   });
   return {
@@ -121,6 +127,11 @@ export interface GenerateOptions {
    * demo that must not stall on a dead connection.
    */
   preferLive?: boolean;
+  /**
+   * Optional Open-Meteo API key for the live climate lookup. Threads straight
+   * through to the provider as the `apikey` query parameter.
+   */
+  openMeteoApiKey?: string;
   /**
    * Called as each pipeline stage starts and finishes.
    *
@@ -242,6 +253,7 @@ export async function generateDesign(
   const climateStage = await runClimateStage(location, {
     preferLive: options.preferLive ?? true,
     preferBackend: options.preferBackend ?? false,
+    openMeteoApiKey: options.openMeteoApiKey,
   });
   const climate = climateStage.climate;
   report?.done('climate', Date.now() - climateStart);

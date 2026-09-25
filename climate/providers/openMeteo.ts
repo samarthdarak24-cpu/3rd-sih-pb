@@ -88,7 +88,36 @@ export interface OpenMeteoOptions {
   timeoutMs?: number;
   /** External abort signal, composed with the internal timeout. */
   signal?: AbortSignal;
+  /**
+   * Optional Open-Meteo API key.
+   *
+   * The free tier needs no key and already covers every latitude/longitude on
+   * Earth, so a key is strictly optional. A key lifts the per-IP rate limit and
+   * (on a paid plan) adds an SLA — useful when the same browser hits the archive
+   * for many sites in one session, or behind a shared venue IP. Set it via the
+   * `NEXT_PUBLIC_OPEN_METEO_API_KEY` env var, or paste it into the topbar at
+   * runtime; either way it is sent as the standard `apikey` query parameter.
+   */
+  apiKey?: string;
 }
+
+/**
+ * Default API key, read from the build-time env.
+ *
+ * `NEXT_PUBLIC_` makes it available to the browser bundle (the live provider
+ * runs client-side, so a server-only var would be invisible to it). Empty when
+ * unset — in which case the keyless free tier is used and works for all sites.
+ */
+export const OPEN_METEO_API_KEY = process.env.NEXT_PUBLIC_OPEN_METEO_API_KEY ?? '';
+
+/**
+ * Commercial endpoints honour the same `apikey` parameter on the standard host,
+ * but paid customers are told to point at the `customer-` prefixed host. Allow
+ * an override so a keyed deployment can use whichever host its plan documents;
+ * defaults to the public archive host when unset.
+ */
+const ARCHIVE_ENDPOINT_KEYED =
+  process.env.NEXT_PUBLIC_OPEN_METEO_ARCHIVE_URL ?? ARCHIVE_ENDPOINT;
 
 function mean(values: number[]): number {
   return values.length === 0 ? 0 : values.reduce((a, b) => a + b, 0) / values.length;
@@ -201,6 +230,8 @@ export async function fetchOpenMeteoClimate(
   options: OpenMeteoOptions = {},
 ): Promise<ClimateData> {
   const timeoutMs = options.timeoutMs ?? 12000;
+  // A runtime key (e.g. pasted in the UI) wins over the build-time env var.
+  const apiKey = options.apiKey ?? OPEN_METEO_API_KEY;
 
   const params = new URLSearchParams({
     latitude: String(location.latitude),
@@ -214,6 +245,9 @@ export async function fetchOpenMeteoClimate(
     wind_speed_unit: 'ms',
     timezone: 'auto',
   });
+  // The key is sent as the standard `apikey` query parameter. On a paid plan
+  // this also routes through the customer host (see ARCHIVE_ENDPOINT_KEYED).
+  if (apiKey) params.set('apikey', apiKey);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -221,7 +255,7 @@ export async function fetchOpenMeteoClimate(
   options.signal?.addEventListener('abort', onExternalAbort);
 
   try {
-    const response = await fetch(`${ARCHIVE_ENDPOINT}?${params.toString()}`, {
+    const response = await fetch(`${ARCHIVE_ENDPOINT_KEYED}?${params.toString()}`, {
       signal: controller.signal,
       headers: { Accept: 'application/json' },
       cache: 'no-store',

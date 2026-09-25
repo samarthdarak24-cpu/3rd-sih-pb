@@ -11,7 +11,7 @@
  * the model the numbers were computed for.
  */
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import {
   Box,
@@ -20,6 +20,8 @@ import {
   FileText,
   Flame,
   LayoutGrid,
+  Maximize2,
+  Minimize2,
   Route,
   Ruler,
   Sun,
@@ -41,6 +43,7 @@ import { type RenderQuality, type SceneExporter } from '@/components/3d/ShelterC
 import { printDesignReport, type DesignReportData } from '@/lib/report';
 import { Chip, EmptyState, Meter, Panel, Segmented, Toggle } from '@/components/ui/primitives';
 import { clockTime, num, pct } from '@/utils/format';
+import { cn } from '@/lib/utils';
 
 /* Three.js touches `window` at import time, so the canvas is client-only. */
 const ShelterCanvas = dynamic(() => import('@/components/3d/ShelterCanvas'), {
@@ -92,6 +95,8 @@ export function ViewportPanel() {
   const showDimensions = useDesignStore((state) => state.showDimensions);
   const showSunPath = useDesignStore((state) => state.showSunPath);
   const toggleLayer = useDesignStore((state) => state.toggleLayer);
+  const viewportExpanded = useDesignStore((state) => state.viewportExpanded);
+  const toggleViewportExpanded = useDesignStore((state) => state.toggleViewportExpanded);
 
   /* Result-side state for the export report. These are the same numbers the
      Results panel renders, so the PDF cannot disagree with the on-screen model. */
@@ -107,6 +112,18 @@ export function ViewportPanel() {
   /* Render fidelity + an imperative handle to the WebGL context for export. */
   const [quality, setQuality] = useState<RenderQuality>('high');
   const exporterRef = useRef<SceneExporter | null>(null);
+
+  /* Esc collapses the expanded viewport — matches the tooltip's promise and
+     is the natural way out of a focus mode. Listener is attached only while
+     expanded, so it cannot swallow Esc on other pages. */
+  useEffect(() => {
+    if (!viewportExpanded) return;
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') toggleViewportExpanded();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [viewportExpanded, toggleViewportExpanded]);
 
   const stamp = (ext: string) => `thermal-shelter-${currentParameters.buildingType}-${ext}`;
 
@@ -173,6 +190,34 @@ export function ViewportPanel() {
           <Chip tone="neutral" title="Model orientation">
             {Math.round(currentParameters.orientation)}°
           </Chip>
+          {/*
+            Expand/collapse toggle.
+
+            In expanded mode the page layout gives the viewport the full content
+            width and the panel grows taller (see the `min-h` on the view
+            container below), so the time sliders, layer toggles, camera
+            presets and geometry chips that the default dock height clips all
+            stay reachable. The icon flips between Maximize2 / Minimize2.
+          */}
+          <button
+            type="button"
+            onClick={toggleViewportExpanded}
+            title={
+              viewportExpanded
+                ? 'Restore side panels (Esc)'
+                : 'Expand the 3D viewport — hide side panels so the model fills the page'
+            }
+            aria-pressed={viewportExpanded}
+            aria-label={viewportExpanded ? 'Collapse viewport' : 'Expand viewport'}
+            className={cn(
+              'flex h-8 w-8 items-center justify-center rounded-md border transition-colors',
+              viewportExpanded
+                ? 'border-primary/45 bg-primary/15 text-primary'
+                : 'border-border bg-secondary/40 text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {viewportExpanded ? <Minimize2 size={13} aria-hidden /> : <Maximize2 size={13} aria-hidden />}
+          </button>
         </>
       }
     >
@@ -221,7 +266,14 @@ export function ViewportPanel() {
       </div>
 
       {/* ---------------- The view ---------------- */}
-      <div className="relative min-h-[380px] flex-1 overflow-hidden rounded-md border bg-gradient-to-b from-[#F5F1EB] to-[#E4DCD1]">
+      <div
+        className={cn(
+          'relative flex-1 overflow-hidden rounded-md border bg-gradient-to-b from-[#F5F1EB] to-[#E4DCD1]',
+          /* Expanded: tall canvas so the time sliders / camera / layer toggles
+             below all stay reachable without scrolling the page. */
+          viewportExpanded ? 'min-h-[640px]' : 'min-h-[380px]',
+        )}
+      >
         {climateData ? (
           mode === 'floorplan' ? (
             <FloorPlanCanvas

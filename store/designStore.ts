@@ -186,6 +186,23 @@ export interface DesignStore extends DesignState {
    * when a demo must not stall on a dead venue connection.
    */
   preferLive: boolean;
+  /**
+   * Optional Open-Meteo API key, entered at runtime in the topbar (or seeded
+   * from `NEXT_PUBLIC_OPEN_METEO_API_KEY`). Lifts the live-lookup rate limit so
+   * many sites resolve without 429s. Empty = keyless free tier (global coverage,
+   * just rate-capped).
+   */
+  openMeteoApiKey: string;
+  /**
+   * Whether the 3D viewport is in expanded (focus) mode.
+   *
+   * When true, the page-level layout collapses the side panels and gives the
+   * viewport the full width of the content area. The viewport itself grows to
+   * a taller canvas, so the controls that get cut off at the dashboard's
+   * default 520 px height (hour/month/day sliders, camera presets, geometry
+   * chips, mode-specific readouts) all stay visible.
+   */
+  viewportExpanded: boolean;
 
   /* --- Actions ------------------------------------------------------ */
   setLocation(location: Location): void;
@@ -221,6 +238,11 @@ export interface DesignStore extends DesignState {
   loadScenario(location: Location, parameters: BuildingParameters): Promise<void>;
   setUseBackend(useBackend: boolean): void;
   setPreferLive(preferLive: boolean): void;
+  /** Persist a runtime Open-Meteo API key (or clear it with ''). */
+  setOpenMeteoApiKey(apiKey: string): void;
+  /** Toggle the 3D viewport's expanded/focus mode (hides side panels). */
+  toggleViewportExpanded(): void;
+  setViewportExpanded(expanded: boolean): void;
   generate(): Promise<void>;
   dismissError(): void;
 }
@@ -552,6 +574,10 @@ export const useDesignStore = create<DesignStore>((set, get) => {
     useBackend: isBackendConfigured(),
     backendConfigured: isBackendConfigured(),
     preferLive: true,
+    openMeteoApiKey: process.env.NEXT_PUBLIC_OPEN_METEO_API_KEY ?? '',
+    /* Viewport starts in its normal dock size; the user opts into expanded
+       mode with the maximise button in the viewport header. */
+    viewportExpanded: false,
 
     /* ---------------- actions ---------------- */
 
@@ -736,8 +762,32 @@ export const useDesignStore = create<DesignStore>((set, get) => {
       });
     },
 
+    setOpenMeteoApiKey(apiKey) {
+      const trimmed = apiKey.trim();
+      set({
+        openMeteoApiKey: trimmed,
+        statusMessage: trimmed
+          ? 'Open-Meteo API key set — live lookups for all locations are rate-limit-free.'
+          : 'Open-Meteo API key cleared — using the keyless free tier (rate-capped).',
+      });
+    },
+
+    toggleViewportExpanded() {
+      const next = !get().viewportExpanded;
+      set({
+        viewportExpanded: next,
+        statusMessage: next
+          ? 'Viewport expanded — side panels hidden so the 3D model can be inspected at full size.'
+          : 'Viewport back to normal — side panels restored.',
+      });
+    },
+
+    setViewportExpanded(expanded) {
+      set({ viewportExpanded: expanded });
+    },
+
     async generate() {
-      const { location, currentParameters, mode, priority, pipeline, useBackend, preferLive } = get();
+      const { location, currentParameters, mode, priority, pipeline, useBackend, preferLive, openMeteoApiKey } = get();
       if (!location || get().isGenerating) return;
 
       const weights = weightsFromPriority(priority);
@@ -780,6 +830,7 @@ export const useDesignStore = create<DesignStore>((set, get) => {
           weights,
           preferBackend: useBackend,
           preferLive,
+          openMeteoApiKey,
           onStage,
         });
         applyGenerated(result, location);

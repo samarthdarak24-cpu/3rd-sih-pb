@@ -290,6 +290,7 @@ export default function OverviewPage() {
   const isGenerating = useDesignStore((state) => state.isGenerating);
   const durationMs = useDesignStore((state) => state.durationMs);
   const climateNote = useDesignStore((state) => state.climateNote);
+  const viewportExpanded = useDesignStore((state) => state.viewportExpanded);
 
   return (
     <div className="space-y-6">
@@ -322,13 +323,30 @@ export default function OverviewPage() {
 
       <KpiRow />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-        <div className="flex h-[520px] min-w-0 flex-col">
+      <div
+        className={cn(
+          'grid gap-6',
+          /* Expanded: viewport alone, full width, taller — the recommendation
+             panel hides because it is exactly the information the user is
+             asking the viewport to take the room of. */
+          viewportExpanded
+            ? 'xl:grid-cols-1'
+            : 'xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]',
+        )}
+      >
+        <div
+          className={cn(
+            'flex min-w-0 flex-col',
+            viewportExpanded ? 'xl:h-[820px]' : 'h-[520px]',
+          )}
+        >
           <ViewportPanel />
         </div>
-        <div className="flex h-[520px] min-w-0 flex-col">
-          <RecommendationPanel />
-        </div>
+        {viewportExpanded ? null : (
+          <div className="flex h-[520px] min-w-0 flex-col">
+            <RecommendationPanel />
+          </div>
+        )}
       </div>
 
       {/* The headline demonstration gets its own band rather than a slot in the

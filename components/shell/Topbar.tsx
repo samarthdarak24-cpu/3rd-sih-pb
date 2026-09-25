@@ -12,21 +12,24 @@
  * "settings" page first: the site is a property of the analysis, not of a form.
  */
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   AlertTriangle,
   Building2,
+  KeyRound,
   MapPin,
   Play,
   RotateCcw,
+  Search,
   Server,
   Sparkles,
   Thermometer,
   Wifi,
 } from 'lucide-react';
 import { AVAILABLE_COUNTRIES, citiesInCountry, STATION_BY_ID } from '@/climate/stations';
+import { searchPlaces, placeToLocation, type GeoPlace } from '@/climate/providers/geocoding';
 import { useDesignStore } from '@/store/designStore';
 import { Chip, Segmented } from '@/components/ui/primitives';
 import { ZONE_LABEL } from '@/lib/labels';
@@ -64,6 +67,8 @@ export function Topbar() {
   const backendConfigured = useDesignStore((state) => state.backendConfigured);
   const preferLive = useDesignStore((state) => state.preferLive);
   const setPreferLive = useDesignStore((state) => state.setPreferLive);
+  const openMeteoApiKey = useDesignStore((state) => state.openMeteoApiKey);
+  const setOpenMeteoApiKey = useDesignStore((state) => state.setOpenMeteoApiKey);
 
   const cities = useMemo(
     () => (location ? citiesInCountry(location.country) : []),
@@ -78,6 +83,57 @@ export function Topbar() {
   const onCityChange = (id: string): void => {
     const station = STATION_BY_ID.get(id);
     if (station) setLocation(station.location);
+  };
+
+  /* --- "Search any location" (free Open-Meteo geocoding) ---------------
+     Lets the user pick a place that is not in the bundled Indian station list.
+     The resolved coordinates flow through the existing climate service, which
+     handles arbitrary points via interpolation/synthesis (offline) or the live
+     archive (when live lookups are on). A keyed lookup avoids 429s on many
+     queries. */
+  const [query, setQuery] = useState('');
+  const [places, setPlaces] = useState<GeoPlace[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const searchBoxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const term = query.trim();
+    if (term.length < 2) {
+      setPlaces([]);
+      setSearching(false);
+      return;
+    }
+    const controller = new AbortController();
+    setSearching(true);
+    const handle = setTimeout(() => {
+      searchPlaces(term, { apiKey: openMeteoApiKey, signal: controller.signal })
+        .then((found) => {
+          setPlaces(found);
+          setShowResults(true);
+        })
+        .finally(() => setSearching(false));
+    }, 300);
+    return () => {
+      clearTimeout(handle);
+      controller.abort();
+    };
+  }, [query, openMeteoApiKey]);
+
+  useEffect(() => {
+    const onClick = (event: MouseEvent): void => {
+      if (searchBoxRef.current && !searchBoxRef.current.contains(event.target as Node)) {
+        setShowResults(false);
+      }
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  const selectPlace = (place: GeoPlace): void => {
+    setLocation(placeToLocation(place));
+    setQuery(`${place.name}, ${place.country}`);
+    setShowResults(false);
   };
 
   return (
@@ -143,6 +199,46 @@ export function Topbar() {
               </option>
             ))}
           </select>
+        </div>
+
+        {/* --- Search any location (free Open-Meteo geocoding) --- */}
+        <div ref={searchBoxRef} className="relative flex items-center gap-1.5">
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <Search size={14} aria-hidden />
+          </span>
+          <input
+            type="text"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onFocus={() => places.length > 0 && setShowResults(true)}
+            placeholder="Search any location…"
+            className="input-field h-9 w-[200px]"
+            aria-label="Search any location by name"
+          />
+          {searching ? (
+            <span className="text-[11px] text-muted-foreground/70">…</span>
+          ) : null}
+          {showResults && places.length > 0 ? (
+            <ul
+              className="absolute left-0 top-[38px] z-50 max-h-64 w-[260px] overflow-auto rounded-lg border border-border bg-panel p-1 shadow-lg"
+              role="listbox"
+            >
+              {places.map((place) => (
+                <li key={place.id}>
+                  <button
+                    type="button"
+                    className="flex w-full flex-col items-start rounded-md px-2.5 py-1.5 text-left hover:bg-secondary/60"
+                    onClick={() => selectPlace(place)}
+                  >
+                    <span className="text-[12.5px] font-medium text-foreground">{place.name}</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {[place.admin1, place.country].filter(Boolean).join(', ')}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
 
         {/* --- Mode --- */}
@@ -215,6 +311,22 @@ export function Topbar() {
           <Wifi size={13} aria-hidden />
           {preferLive ? 'Live data' : 'Offline'}
         </button>
+
+        {/* --- Open-Meteo API key (optional) ---
+             A key only lifts the live-lookup rate limit so many sites resolve
+             without 429s; it is not required for global coverage. Seeded from
+             NEXT_PUBLIC_OPEN_METEO_API_KEY, and editable here at runtime. */}
+        <div className="flex items-center gap-1.5" title="Optional Open-Meteo API key — lifts the live-lookup rate limit for many sites">
+          <KeyRound size={13} className="text-muted-foreground" aria-hidden />
+          <input
+            type="password"
+            value={openMeteoApiKey}
+            onChange={(event) => setOpenMeteoApiKey(event.target.value)}
+            placeholder="Open-Meteo key (optional)"
+            className="input-field h-9 w-[150px]"
+            aria-label="Open-Meteo API key"
+          />
+        </div>
 
         {/* --- Generate --- */}
         <div className="ml-auto flex items-center gap-3">

@@ -41,6 +41,14 @@ export interface ResolveClimateOptions {
   preferLive?: boolean;
   /** Try the FastAPI backend first (only if configured). */
   preferBackend?: boolean;
+  /**
+   * Optional Open-Meteo API key for the live lookup.
+   *
+   * Lifts the per-IP rate limit so many sites can be resolved in one session
+   * without hitting 429s. Sent as the `apikey` query parameter by the provider.
+   * Falls back to `NEXT_PUBLIC_OPEN_METEO_API_KEY` when omitted.
+   */
+  openMeteoApiKey?: string;
   signal?: AbortSignal;
   /**
    * How long to wait for the live API, ms. Defaults to `LIVE_PROBE_TIMEOUT_MS`.
@@ -219,6 +227,7 @@ async function resolveClimateUncached(
       const data = await fetchOpenMeteoClimate(location, {
         signal: options.signal,
         timeoutMs: options.liveTimeoutMs ?? LIVE_PROBE_TIMEOUT_MS,
+        apiKey: options.openMeteoApiKey,
       });
       liveAvailability = 'available';
       return {
